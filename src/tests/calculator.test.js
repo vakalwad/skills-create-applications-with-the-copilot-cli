@@ -1,6 +1,6 @@
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
-const { calculate } = require('../calculator');
+const { calculate, modulo, power, squareRoot } = require('../calculator');
 
 describe('calculate', () => {
   test.each([
@@ -35,11 +35,56 @@ describe('calculate', () => {
   });
 
   test('rejects unsupported operations', () => {
-    expect(() => calculate(2, '%', 3)).toThrow('supported operations');
+    expect(() => calculate(2, '?', 3)).toThrow('supported operations');
   });
 
   test('rejects a non-finite result', () => {
     expect(() => calculate(1e308, '*', 10)).toThrow('result is not a finite number');
+  });
+});
+
+describe('additional operations', () => {
+  test.each([[5, 2, 1], [10, 3, 1], [-10, 3, -1], [4.5, 2, 0.5]])(
+    'modulo(%s, %s) = %s', (a, b, expected) => {
+      expect(modulo(a, b)).toBe(expected);
+      expect(calculate(a, '%', b)).toBe(expected);
+    },
+  );
+
+  test.each([0, -0])('rejects modulo by %s', (divisor) => {
+    expect(() => modulo(1, divisor)).toThrow('modulo by zero');
+  });
+
+  test.each([[2, 3, 8], [2, -2, 0.25], [-2, 3, -8], [5, 0, 1]])(
+    'power(%s, %s) = %s', (base, exponent, expected) => {
+      expect(power(base, exponent)).toBe(expected);
+      expect(calculate(base, '^', exponent)).toBe(expected);
+    },
+  );
+
+  test.each([[0, -1], [-1, 0.5], [1e308, 2]])(
+    'rejects non-finite power result for %s ^ %s', (base, exponent) => {
+      expect(() => power(base, exponent)).toThrow('result is not a finite number');
+    },
+  );
+
+  test.each([[0, 0], [9, 3], [16, 4], [2.25, 1.5]])(
+    'squareRoot(%s) = %s', (input, expected) => {
+      expect(squareRoot(input)).toBe(expected);
+      expect(calculate(input, 'sqrt')).toBe(expected);
+    },
+  );
+
+  test('rejects a negative square root', () => {
+    expect(() => squareRoot(-1)).toThrow('square root of a negative number');
+  });
+
+  test.each([NaN, Infinity, -Infinity, '2'])('rejects non-finite or non-number input %s', (input) => {
+    expect(() => modulo(input, 1)).toThrow('finite numbers');
+    expect(() => modulo(1, input)).toThrow('finite numbers');
+    expect(() => power(input, 1)).toThrow('finite numbers');
+    expect(() => power(1, input)).toThrow('finite numbers');
+    expect(() => squareRoot(input)).toThrow('finite number');
   });
 });
 
@@ -52,6 +97,9 @@ describe('calculator CLI', () => {
     [['10', '-', '4'], '6'],
     [['45', '*', '2'], '90'],
     [['20', '/', '5'], '4'],
+    [['5', '%', '2'], '1'],
+    [['2', '^', '3'], '8'],
+    [['sqrt', '16'], '4'],
   ])('prints the result for %j', (args, expected) => {
     const result = run(...args);
     expect(result.status).toBe(0);
@@ -64,7 +112,13 @@ describe('calculator CLI', () => {
     [['1', '+', '2', '3'], /Usage:/],
     [['1', '/', '0'], /division by zero/],
     [['1', '/', '-0'], /division by zero/],
-    [['1', '%', '2'], /supported operations/],
+    [['1', '?', '2'], /supported operations/],
+    [['1', '%', '0'], /modulo by zero/],
+    [['-1', '^', '0.5'], /result is not a finite number/],
+    [['sqrt', '-1'], /square root of a negative number/],
+    [['sqrt', ' '], /finite number/],
+    [['sqrt', 'Infinity'], /finite number/],
+    [['9', 'sqrt', '2'], /Usage:/],
     [[' ', '+', '2'], /finite numbers/],
     [['1', '+', 'abc'], /finite numbers/],
     [['Infinity', '+', '2'], /finite numbers/],
